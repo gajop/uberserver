@@ -56,6 +56,7 @@ class DataHandler:
 		self.max_threads = 25
 		self.sqlurl = 'sqlite:///server.db'
 		self.nextbattle = 0
+		self.nextqueue = 0
 		self.SayHooks = __import__('SayHooks')
 		self.censor = True
 		self.motd = None
@@ -70,6 +71,7 @@ class DataHandler:
 		self.clients = {}
 		self.db_ids = {}
 		self.battles = {}
+		self.queues = {}
 		self.socket = None
 		self.detectIp()
 
@@ -354,7 +356,7 @@ class DataHandler:
 		try:
 			while self.console_buffer:
 				line = self.console_buffer.pop(0).encode(UNICODE_ENCODING)
-				print line
+				print(line)
 				if self.log:
 					self.logfile.write(line+'\n')
 			

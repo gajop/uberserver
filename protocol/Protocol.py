@@ -132,7 +132,7 @@ restricted = {
 	'CLOSEQUEUE',
 	'JOINQUEUEACCEPT',
 	'JOINQUEUEDENY',
-	'REMOVEQUEUEUSER',
+	'REMOVEQUEUEUSERS',
 	'READYCHECK',
 	'READYCHECKRESULT',
 	########
@@ -3631,21 +3631,21 @@ class Protocol:
 			player.queues.append(name)
 			player.Send(response)
 
-	def in_REMOVEQUEUEUSER(self, client, msg):
+	def in_REMOVEQUEUEUSERS(self, client, msg):
 		try: 
 			obj = json.loads(msg)
 		except Exception:
-			self.out_FAILED(client, "REMOVEQUEUEUSER", JSON_ERR)
+			self.out_FAILED(client, "REMOVEQUEUEUSERS", JSON_ERR)
 			return False
 		
 		try:
 			name = getKey(obj, "name", int)
 			userName = getKey(obj, "userName", unicode)
 		except KeyError as keyError:
-			self.out_FAILED(client, "REMOVEQUEUEUSER", keyErrorMsg(keyError))
+			self.out_FAILED(client, "REMOVEQUEUEUSERS", keyErrorMsg(keyError))
 			return False
 		except TypeError as typeError:
-			self.out_FAILED(client, "REMOVEQUEUEUSER", typeErrorMsg(typeError))
+			self.out_FAILED(client, "REMOVEQUEUEUSERS", typeErrorMsg(typeError))
 			return False
 
 		self._root.queues[name].users.remove(client.username)

@@ -1,9 +1,9 @@
 from AutoDict import AutoDict
 
 class Queue(AutoDict):
-	def __init__(self, root, id, title, description, minPlayers, maxPlayers, teamJoinAllowed, botName, requireConfirmation, gameNames=[], mapNames=[], engineVersions=[], users=[]):
+	def __init__(self, root, name, title, description, minPlayers, maxPlayers, teamJoinAllowed, botName, requireConfirmation, gameNames=[], mapNames=[], engineVersions=[], users=[]):
 		self._root = root
-		self.id = id
+		self.name = name
 
 		self.title = title
 		self.description = description

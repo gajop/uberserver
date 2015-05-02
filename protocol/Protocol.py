@@ -225,28 +225,28 @@ flag_map = {
 }
 
 def isListKeyType(lst, keyType):
-		return all(isinstance(i, keyType) for i in lst)
+	return all(isinstance(i, keyType) for i in lst)
 
 def getKey(obj, key, keyType, mandatory = True):
-		if not mandatory and key not in obj:
-				return None
-		value = obj[key]
-		if value is None:
-			raise KeyError("Mandatory field: " + key + " is passed as null")
-		if not isinstance(value, keyType):
-				raise TypeError(key, keyType, type(value))
-		return value
+    if not mandatory and key not in obj:
+        return None
+    value = obj[key]
+    if value is None:
+        raise KeyError("Mandatory field: " + key + " is passed as null")
+    if not isinstance(value, keyType):
+        raise TypeError(key, keyType, type(value))
+    return value
 
 def keyErrorMsg(keyError):
 	return "Missing argument: \"" + keyError.message + "\""
 
 def typeErrorMsg(typeError):
 	if len(typeError.args) >= 3:
-			return "Wrong type: \"" + typeError.args[2].__name__ + "\" for \"" + typeError.args[0] + "\", expected \"" + typeError.args[1].__name__ + "\""
+		return "Wrong type: \"" + typeError.args[2].__name__ + "\" for \"" + typeError.args[0] + "\", expected \"" + typeError.args[1].__name__ + "\""
 	elif len(typeError.args) >= 2:
-			return "Wrong type for \"" + typeError.args[0] + "\", expected \"" + typeError.args[1] + "\""
+		return "Wrong type for \"" + typeError.args[0] + "\", expected \"" + typeError.args[1] + "\""
 	else:
-			return "Wrong type " + str(typeError)
+		return "Wrong type " + str(typeError)
 
 JSON_ERR = "JSON is not valid"
 
@@ -306,12 +306,12 @@ class Protocol:
 				self.in_LEAVEBATTLE(client)
 
 			# TODO: optimize (make a userId -> managed queues dict instead)
-			for queueId in client.managedQueues:
-				print("Managed queue: " + str(queueId))
-				self.removeQueue(queueId)
+			for name in client.managedQueues:
+				print("Managed queue: " + str(name))
+				self.removeQueue(name)
 				
-			for queueId in client.queues:
-				self.leaveQueue(queueId, client.username)
+			for name in client.queues:
+				self.leaveQueue(name, client.username)
 
 			self.broadcast_RemoveUser(client)
 			try:
@@ -860,39 +860,39 @@ class Protocol:
 
 		return True
 
-	def removeQueue(self, queueId):		
-		queue = self._root.queues.pop(queueId)
+	def removeQueue(self, name):		
+		queue = self._root.queues.pop(name)
 		for user in queue.users:
 			client = self.clientFromUsername(user)
-			client.queues.remove(queueId)
-		self._root.broadcast("QUEUECLOSED " + json.dumps({"queueId":queueId}))
+			client.queues.remove(name)
+		self._root.broadcast("QUEUECLOSED " + json.dumps({"name":name}))
 		#for user in queue.users:
 			#client = self.clientFromUsername(user)
-			#client.Send("LEFTQUEUE", queueId, "closed")
+			#client.Send("LEFTQUEUE", name, "closed")
 		
-	def leaveQueue(self, queueId, userName, reason=None, informPlayer=True, informBot=True):
+	def leaveQueue(self, name, userName, reason=None, informPlayer=True, informBot=True):
 		# TODO: remove the entire team
 		userNames = [ userName ]
 		
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			print("Failed to leave queue with id: %s " % queueId)
+			print("Failed to leave queue with id: %s " % name)
 			return
 		
 		if informPlayer:
-			leaveCommand = "LEFTQUEUE " + json.dumps({"queueId":queue.id, "reason":reason})
+			leaveCommand = "LEFTQUEUE " + json.dumps({"name":queue.name, "reason":reason})
 		for userName in userNames: # disconnect the entire team
 			queue.users.remove(userName)
 			client = self.clientFromUsername(userName)
 			if client is not None:
-				client.queues.remove(queue.id)
+				client.queues.remove(queue.name)
 				if informPlayer:
 					client.Send(leaveCommand)
 		
 		if informBot:
 			botClient = self.clientFromUsername(queue.botName)
-			botClient.Send("QUEUELEFT " + json.dumps({"queueId":queue.id, "userNames":userNames}))
+			botClient.Send("QUEUELEFT " + json.dumps({"name":queue.name, "userNames":userNames}))
 
 	# Begin incoming protocol section #
 	#
@@ -3351,7 +3351,7 @@ class Protocol:
 	def in_LISTQUEUES(self, client):
 		queues = []
 		for q in self._root.queues.values():
-			queues.append({"queueId":q.id, "title":q.title, "description":q.description, 
+			queues.append({"name":q.name, "title":q.title, "description":q.description, 
 				"minPlayers":q.minPlayers, "maxPlayers":q.maxPlayers, 
 				"teamJoinAllowed":q.teamJoinAllowed,"gameNames":q.gameNames, 
 				"mapNames":q.mapNames, "engineVersions":q.engineVersions})
@@ -3366,7 +3366,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "JOINQUEUE", keyErrorMsg(keyError))
 			return False
@@ -3377,9 +3377,9 @@ class Protocol:
 		userName = client.username
 		
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "JOINQUEUE", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "JOINQUEUE", "No such queue: %s" % name)
 			return False
 			
 		# TODO: find users in the same team
@@ -3391,7 +3391,7 @@ class Protocol:
 				return False
 	
 		botClient = self.clientFromUsername(queue.botName)
-		jsonStr = json.dumps({"queueId":queue.id, "userNames":userNames})
+		jsonStr = json.dumps({"name":queue.name, "userNames":userNames})
 		botClient.Send("JOINQUEUEREQUEST " + jsonStr)
 		
 		#if queue.requireConfirmation:
@@ -3399,7 +3399,7 @@ class Protocol:
 		#else:
 			#queue.users.append(userName)
 			#botClient.Send("JOINEDQUEUE " + jsonStr)
-			#client.Send("JOINQUEUE " + json.dumps({"queueId":queue.id}))
+			#client.Send("JOINQUEUE " + json.dumps({"name":queue.name}))
 
 	def in_LEAVEQUEUE(self, client, msg):
 		try: 
@@ -3409,25 +3409,25 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "LEAVEQUEUE", keyErrorMsg(keyError))
 			return False
 		except TypeError as typeError:
 			self.out_FAILED(client, "LEAVEQUEUE", typeErrorMsg(typeError))
 			return False
-					
+		
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "LEAVEQUEUE", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "LEAVEQUEUE", "No such queue: %s" % name)
 			return False
 		
 		if client.username not in queue.users:
 			self.out_FAILED(client, "LEAVEQUEUE", "User is not in queue")
 			return False
 		
-		self.leaveQueue(queue.id, client.username)
+		self.leaveQueue(queue.name, client.username)
 
 	def in_READYCHECKRESPONSE(self, client, msg):
 		try: 
@@ -3439,7 +3439,7 @@ class Protocol:
 		try:
 			response = getKey(obj, "response", unicode)
 			responseTime = getKey(obj, "responseTime", int)
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "READYCHECKRESPONSE", keyErrorMsg(keyError))
 			return False
@@ -3448,23 +3448,23 @@ class Protocol:
 			return False
 
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "READYCHECKRESPONSE", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "READYCHECKRESPONSE", "No such queue: %s" % name)
 			return False
 		
-		if queueId not in client.queues:
-			self.out_FAILED(client, "READYCHECKRESPONSE", "Client is not in queue: %s" % queueId)
+		if name not in client.queues:
+			self.out_FAILED(client, "READYCHECKRESPONSE", "Client is not in queue: %s" % name)
 			return False
 		
 		# TODO: check if there is a readycheck to respond to
 		
 		# remove users that are not ready
 		if response != "ready":
-			self.leaveQueue(queueId, client.username)
+			self.leaveQueue(name, client.username)
 
 		botClient = self.clientFromUsername(queue.botName)
-		jsonStr = json.dumps({"queueId":queue.id, "userName":client.username, 
+		jsonStr = json.dumps({"name":queue.name, "userName":client.username, 
 		    "response":response, "responseTime":responseTime})
 		botClient.Send("READYCHECKRESPONSE " + jsonStr)
 	
@@ -3473,7 +3473,7 @@ class Protocol:
 		print("OPENQUEUE")
 		print(msg)
 		if not client.bot:
-			self.out_FAILED(client, "OPENQUEUE", "Only bots can join")
+			self.out_FAILED(client, "OPENQUEUE", "Only bots can open queues")
 			return
 
 		try: 
@@ -3484,7 +3484,7 @@ class Protocol:
 
 		print(obj)
 		try:
-			# TODO: add a name param (unique)
+			name = getKey(obj, "name", unicode)
 			title = getKey(obj, "title", unicode)
 			description = getKey(obj, "description", unicode)
 			# TODO: can be optional?
@@ -3511,22 +3511,19 @@ class Protocol:
 			return False
 			
 		botName = client.username
-
-		queueId = self._root.nextqueue
-		self._root.nextqueue += 1
 	   
 		# TODO: handle None params 
 		queue = Queue(
-			root=self._root, id=queueId, title=title, description=description, 
+			root=self._root, name=name, title=title, description=description, 
 			minPlayers=minPlayers, maxPlayers=maxPlayers, teamJoinAllowed=teamJoinAllowed,
 			botName=botName, requireConfirmation=requireConfirmation, gameNames=gameNames, mapNames=mapNames, engineVersions=engineVersions)
-		self._root.queues[queueId] = queue
-		client.managedQueues.append(queueId)
+		self._root.queues[name] = queue
+		client.managedQueues.append(name)
 
-		client.Send("OPENQUEUE " + json.dumps({"queueId" : queueId}))
+		client.Send("OPENQUEUE " + json.dumps({"name" : name}))
 		
 		# send everyone a QUEUEOPENED
-		obj["queueId"] = queueId
+		obj["name"] = name
 		self._root.broadcast("QUEUEOPENED " + json.dumps(obj))
 
 	def in_CLOSEQUEUE(self, client, msg):
@@ -3537,7 +3534,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "CLOSEQUEUE", keyErrorMsg(keyError))
 			return False
@@ -3546,16 +3543,16 @@ class Protocol:
 			return False
 
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "CLOSEQUEUE", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "CLOSEQUEUE", "No such queue: %s" % name)
 			return False
 		
 		if queue.botName != client.username:
-			self.out_FAILED(client, "CLOSEQUEUE", "This queue is not owned by the bot: %s" % queueId)
+			self.out_FAILED(client, "CLOSEQUEUE", "This queue is not owned by the bot: %s" % name)
 			return False
 		
-		self.removeQueue(queueId)
+		self.removeQueue(name)
 
 	def in_JOINQUEUEACCEPT(self, client, msg):
 		try: 
@@ -3565,7 +3562,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 			userNames = getKey(obj, "userNames", list)
 			if not isListKeyType(userNames, unicode):
 				raise TypeError("userNames", "unicode list")
@@ -3577,23 +3574,23 @@ class Protocol:
 			return False
 
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "JOINQUEUEACCEPT", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "JOINQUEUEACCEPT", "No such queue: %s" % name)
 			return False
 
 		# TODO: check if there's a join request
 		
 		if client.username != queue.botName:
-			self.out_FAILED(client, "JOINQUEUEACCEPT", "You don't own this queue: " + queueId)
+			self.out_FAILED(client, "JOINQUEUEACCEPT", "You don't own this queue: " + name)
 			return False
 
 		queue.users += userNames
 		
-		response = "JOINQUEUE " + json.dumps({"queueId":queue.id})
+		response = "JOINQUEUE " + json.dumps({"name":queue.name})
 		for userName in userNames:
 			player = self.clientFromUsername(userName)
-			player.queues.append(queueId)
+			player.queues.append(name)
 			player.Send(response)
 
 	def in_JOINQUEUEDENY(self, client, msg):
@@ -3604,7 +3601,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 			userNames = getKey(obj, "userNames", list)
 			if not isListKeyType(userNames, unicode):
 				raise TypeError("userNames", "unicode list")
@@ -3617,21 +3614,21 @@ class Protocol:
 			return False
 
 		try:
-			queue = self._root.queues[queueId]
+			queue = self._root.queues[name]
 		except KeyError:
-			self.out_FAILED(client, "JOINQUEUEDENY", "No such queue: %s" % queueId)
+			self.out_FAILED(client, "JOINQUEUEDENY", "No such queue: %s" % name)
 			return False
 
 		# TODO: check if there's a join request
 		
 		if client.username != queue.botName:
-			self.out_FAILED(client, "JOINQUEUEDENY", "You don't own this queue: " + queueId)
+			self.out_FAILED(client, "JOINQUEUEDENY", "You don't own this queue: " + name)
 			return False
 		
-		response = "JOINQUEUEFAILED " + json.dumps({"queueId":queue.id, "reason":reason})
+		response = "JOINQUEUEFAILED " + json.dumps({"name":queue.name, "reason":reason})
 		for userName in userNames:
 			player = self.clientFromUsername(userName)
-			player.queues.append(queueId)
+			player.queues.append(name)
 			player.Send(response)
 
 	def in_REMOVEQUEUEUSER(self, client, msg):
@@ -3642,7 +3639,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", int)
 			userName = getKey(obj, "userName", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "REMOVEQUEUEUSER", keyErrorMsg(keyError))
@@ -3651,7 +3648,7 @@ class Protocol:
 			self.out_FAILED(client, "REMOVEQUEUEUSER", typeErrorMsg(typeError))
 			return False
 
-		self._root.queues[queueId].users.remove(client.username)
+		self._root.queues[name].users.remove(client.username)
 		# TODO: check if queue exists and owned by bot, and user is in it
 		# TODO: implement
 
@@ -3663,7 +3660,7 @@ class Protocol:
 			return False
 		
 		try:
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 			userNames = getKey(obj, "userNames", list)
 			responseTime = getKey(obj, "responseTime", int)
 		except KeyError as keyError:
@@ -3673,11 +3670,11 @@ class Protocol:
 			self.out_FAILED(client, "READYCHECK", typeErrorMsg(typeError))
 			return False
 
-		queue = self._root.queues[queueId]
+		queue = self._root.queues[name]
 		# TODO: check if queue exists and owned by bot, and users are in it
 		# TODO: implement
 		
-		jsonStr = json.dumps({"queueId":queue.id, "responseTime":responseTime})
+		jsonStr = json.dumps({"name":queue.name, "responseTime":responseTime})
 		for userName in userNames:
 			player = self.clientFromUsername(userName)
 			player.Send("READYCHECK " + jsonStr)
@@ -3691,7 +3688,7 @@ class Protocol:
 		
 		try:
 			result = getKey(obj, "result", unicode)
-			queueId = getKey(obj, "queueId", int)
+			name = getKey(obj, "name", unicode)
 			userNames = getKey(obj, "userNames", list)
 			if not isListKeyType(userNames, unicode):
 				raise TypeError("userNames", "unicode list")
@@ -3702,10 +3699,10 @@ class Protocol:
 			self.out_FAILED(client, "READYCHECKRESULT", typeErrorMsg(typeError))
 			return False
 
-		queue = self._root.queues[queueId]
+		queue = self._root.queues[name]
 		# TODO: check if queue exists and there is a readycheck to respond to
 				
-		jsonStr = json.dumps({"queueId":queue.id, "result":result})
+		jsonStr = json.dumps({"name":queue.name, "result":result})
 		for userName in userNames:
 			playerClient = self.clientFromUsername(userName)
 			playerClient .Send("READYCHECKRESULT " + jsonStr)

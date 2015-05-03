@@ -3393,13 +3393,6 @@ class Protocol:
 		botClient = self.clientFromUsername(queue.botName)
 		jsonStr = json.dumps({"name":queue.name, "userNames":userNames})
 		botClient.Send("JOINQUEUEREQUEST " + jsonStr)
-		
-		#if queue.requireConfirmation:
-			#botClient.Send("JOINQUEUEREQUEST " + jsonStr)
-		#else:
-			#queue.users.append(userName)
-			#botClient.Send("JOINEDQUEUE " + jsonStr)
-			#client.Send("JOINQUEUE " + json.dumps({"name":queue.name}))
 
 	def in_LEAVEQUEUE(self, client, msg):
 		try: 
@@ -3470,8 +3463,6 @@ class Protocol:
 	
 	# Queue (MM bot) TODO: these commands should only be allowed for mod bots 
 	def in_OPENQUEUE(self, client, msg):
-		print("OPENQUEUE")
-		print(msg)
 		if not client.bot:
 			self.out_FAILED(client, "OPENQUEUE", "Only bots can open queues")
 			return
@@ -3482,7 +3473,6 @@ class Protocol:
 			self.out_FAILED(client, "OPENQUEUE", JSON_ERR)
 			return False
 
-		print(obj)
 		try:
 			name = getKey(obj, "name", unicode)
 			title = getKey(obj, "title", unicode)
@@ -3640,7 +3630,8 @@ class Protocol:
 		
 		try:
 			name = getKey(obj, "name", int)
-			userName = getKey(obj, "userName", unicode)
+			userNames = getKey(obj, "userNames", list)
+			reason = getKey(obj, "reason", unicode)
 		except KeyError as keyError:
 			self.out_FAILED(client, "REMOVEQUEUEUSERS", keyErrorMsg(keyError))
 			return False
@@ -3650,7 +3641,11 @@ class Protocol:
 
 		self._root.queues[name].users.remove(client.username)
 		# TODO: check if queue exists and owned by bot, and user is in it
-		# TODO: implement
+		response = "LEFTQUEUE " + json.dumps({"name":queue.name, "reason":reason})
+		for userName in userNames:
+			player = self.clientFromUsername(userName)
+			player.queues.append(name)
+			player.Send(response)
 
 	def in_READYCHECK(self, client, msg):
 		try: 
@@ -3662,6 +3657,8 @@ class Protocol:
 		try:
 			name = getKey(obj, "name", unicode)
 			userNames = getKey(obj, "userNames", list)
+			if not isListKeyType(userNames, unicode):
+				raise TypeError("userNames", "unicode list")
 			responseTime = getKey(obj, "responseTime", int)
 		except KeyError as keyError:
 			self.out_FAILED(client, "READYCHECK", keyErrorMsg(keyError))
@@ -3672,7 +3669,6 @@ class Protocol:
 
 		queue = self._root.queues[name]
 		# TODO: check if queue exists and owned by bot, and users are in it
-		# TODO: implement
 		
 		jsonStr = json.dumps({"name":queue.name, "responseTime":responseTime})
 		for userName in userNames:
@@ -3709,25 +3705,270 @@ class Protocol:
 	
 	
 	def in_INVITETEAM(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "INVITETEAM", JSON_ERR)
+			return False
+
+		try:
+			userName = getKey(obj, "userName", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "INVITETEAM", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "INVITETEAM", typeErrorMsg(typeError))
+			return False
+
+		if userName == client.username:
+			self.out_FAILED(client, "INVITETEAM", "Cannot invite self")
+			return False
+
+		if client.current_team is None:
+			team_id = str(self._root.nextteam)
+			self._root.nextteam += 1
+			client.current_team = team_id
+			client.is_team_leader = True
+			self._root.teams[team_id] = Team(team_id, client.username, [client.username])
+			client.Send("JOINEDTEAM " + json.dumps({"userNames":[client.username], "leader":client.username}))
+		elif client.is_team_leader:
+			team_id = client.current_team
+		else:
+			self.out_FAILED(client, "INVITETEAM", "Currently in team and not leader")
+			return False
+
+		playerClient = self.clientFromUsername(userName)
+		if playerClient is None:
+			self.out_FAILED(client, "INVITETEAM", "No such player to invite")
+			return False
+		
+		if playerClient.current_team is not None:
+			self.out_FAILED(client, "INVITETEAM", "Player is already in a team")
+			return False
+
+		if playerClient.team_invites[client.username]:
+			self.out_FAILED(client, "INVITETEAM", "Player has already been invited")
+			return False
+
+		playerClient[client.username] = team_id
+		playerClient.Send("INVITETEAM " + json.dumps({"userName":client.username}))
 	
 	def in_INVITETEAMACCEPT(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "INVITETEAMACCEPT", JSON_ERR)
+			return False
 
+		try:
+			userName = getKey(obj, "userName", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "INVITETEAMACCEPT", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "INVITETEAMACCEPT", typeErrorMsg(typeError))
+			return False
+
+		if client.current_team is not None:
+			self.out_FAILED(client, "INVITETEAMACCEPT", "Already in a team")
+			return False
+
+		try:
+			team_id = client.team_invites.pop(userName)
+		except KeyError:
+			self.out_FAILED(client, "INVITETEAMACCEPT", "No such invite")
+			return False
+
+		leaderClient = self.clientFromUsername(userName)
+		if leaderClient is not None:
+			self.out_FAILED(client, "INVITETEAMACCEPT", "No such team leader")
+			return False
+
+		if leaderClient.current_team != team_id or not leaderClient.is_team_leader:
+			self.out_FAILED(client, "INVITETEAMACCEPT", "Invite is no longer valid")
+			return False
+
+		team = self._root.teams[team_id]
+		team.users.append(client.username)
+		client.current_team = team_id
+
+		leaderClient.Send("INVITETEAMACCEPTED " + json.dumps({"userName":client.username}))
+
+		joinedStr = "JOINEDTEAM " + json.dumps({"userName":client.username})
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(joinedStr)
+
+		# send declines to all other team invites
+		declinedStr = "INVITETEAMDECLINED " + json.dumps({"userName":client.username})
+		for team_id in client.team_invites.values():
+			team = self._root.teams[team_id]
+			if team is None:
+				continue
+			leaderClient = self.clientFromUsername(team.leader)
+			if leaderClient is None or leaderClient.team_id != team_id or not leaderClient.is_team_leader:
+				continue
+			leaderClient.send(declinedStr)
+		client.team_invites.clear()
+
+	# TODO: a lot of code here is duplicate of in_INVITETEAMACCEPT: combine it in a single function?
 	def in_INVITETEAMDECLINE(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "INVITETEAMDECLINE", JSON_ERR)
+			return False
+
+		try:
+			userName = getKey(obj, "userName", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "INVITETEAMDECLINE", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "INVITETEAMDECLINE", typeErrorMsg(typeError))
+			return False
+
+		if client.current_team is not None:
+			self.out_FAILED(client, "INVITETEAMDECLINE", "Already in a team")
+			return False
+
+		try:
+			team_id = client.team_invites.pop(userName)
+		except KeyError:
+			self.out_FAILED(client, "INVITETEAMDECLINE", "No such invite")
+			return False
+
+		leaderClient = self.clientFromUsername(userName)
+		if leaderClient is not None:
+			self.out_FAILED(client, "INVITETEAMDECLINE", "No such team leader")
+			return False
+
+		if leaderClient.current_team != team_id or not leaderClient.is_team_leader:
+			self.out_FAILED(client, "INVITETEAMDECLINE", "Invite is no longer valid")
+			return False
+
+		leaderClient.Send("INVITETEAMDECLINE " + json.dumps({"userName":client.username}))
 	
 	def in_KICKFROMTEAM(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "KICKFROMTEAM", JSON_ERR)
+			return False
+
+		try:
+			userName = getKey(obj, "userName", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "KICKFROMTEAM", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "KICKFROMTEAM", typeErrorMsg(typeError))
+			return False
 	
+		if client.current_team is None:
+			self.out_FAILED(client, "KICKFROMTEAM", "Not in team")
+			return False
+		elif not client.is_team_leader:
+			self.out_FAILED(client, "KICKFROMTEAM", "Not leader of a team")
+			return False
+
+		playerClient = self.clientFromUsername(userName)
+		if playerClient is None:
+			self.out_FAILED(client, "KICKFROMTEAM", "No such player to kick")
+			return False
+
+		team = self._root.teams[client.current_team]
+		if userName not in team.users:
+			self.out_FAILED(client, "KICKFROMTEAM", "Player isn't in the team")
+			return False
+		if userName == client.username:
+			self.out_FAILED(client, "KICKFROMTEAM", "Cannot kick self")
+			return False
+
+		team.users.remove(userName)
+		playerClient.current_team = None
+		
+		leftStr = "LEFTTEAM " + json.dumps({"userName":userName, "reason":"kicked"})
+		playerClient.Send(leftStr)
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(leftStr)
+		
 	def in_LEAVETEAM(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "LEAVETEAM", JSON_ERR)
+			return False
+	
+		if client.current_team is None:
+			self.out_FAILED(client, "LEAVETEAM", "Not in team")
+			return False
+		elif client.is_team_leader:
+			# TODO: make it possible by automatically assigning someone a leader
+			self.out_FAILED(client, "LEAVETEAM", "Can't leave as leader. Make someone else leader first.")
+			return False
+
+		team = self._root.teams[client.current_team]
+		team.users.remove(userName)
+		c.current_team = None
+
+		leftStr = "LEFTTEAM " + json.dumps({"userName":userName, "reason":"left"})
+		client.Send(leftStr)
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(leftStr)
 	
 	def in_SAYTEAM(self, client, msg):
 		pass
+
+	def in_SAYTEAMEX(self, client, msg):
+		pass
 	
 	def in_SETTEAMLEADER(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "SETTEAMLEADER", JSON_ERR)
+			return False
+
+		try:
+			userName = getKey(obj, "userName", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "SETTEAMLEADER", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "SETTEAMLEADER", typeErrorMsg(typeError))
+			return False
+	
+		if client.current_team is None:
+			self.out_FAILED(client, "SETTEAMLEADER", "Not in team")
+			return False
+		elif not client.is_team_leader:
+			self.out_FAILED(client, "SETTEAMLEADER", "Not leader of a team")
+			return False
+
+		playerClient = self.clientFromUsername(userName)
+		if playerClient is None:
+			self.out_FAILED(client, "SETTEAMLEADER", "No such player to make leader")
+			return False
+
+		team = self._root.teams[client.current_team]
+		if userName not in team.users:
+			self.out_FAILED(client, "SETTEAMLEADER", "Player isn't in the team")
+			return False
+		if userName == client.username:
+			self.out_FAILED(client, "SETTEAMLEADER", "Already leader")
+			return False
+
+		team.leader = userName
+		client.is_team_leader = False
+		playerClient.is_team_leader = True
+
+		leftStr = "SETTEAMLEADER " + json.dumps({"userName":userName})
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(leftStr)
 	
 	def in_CONNECTUSER(self, client, msg):
 		try: 

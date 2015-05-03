@@ -120,6 +120,9 @@ class Client(BaseClient):
 		
 		self.queues = [] # queues that the player has joined
 		self.managedQueues = [] # queues that the MM bot is managing
+		self.current_team = None
+		self.is_team_leader = False
+		self.team_invites = {} # leader name -> team id (we store both in case things change in the meanwhile)
 
 	def set_aes_cipher_obj(self, obj): self.aes_cipher_obj = obj
 	def get_aes_cipher_obj(self): return self.aes_cipher_obj

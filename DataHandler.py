@@ -56,6 +56,7 @@ class DataHandler:
 		self.max_threads = 25
 		self.sqlurl = 'sqlite:///server.db'
 		self.nextbattle = 0
+		self.nextteam = 0
 		self.SayHooks = __import__('SayHooks')
 		self.censor = True
 		self.motd = None
@@ -71,6 +72,7 @@ class DataHandler:
 		self.db_ids = {}
 		self.battles = {}
 		self.queues = {}
+		self.teams = {}
 		self.socket = None
 		self.detectIp()
 

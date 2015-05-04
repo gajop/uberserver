@@ -10,6 +10,7 @@ import socket
 from Channel import Channel
 from Battle import Battle
 from Queue import Queue
+from Team import Team
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
@@ -3729,7 +3730,7 @@ class Protocol:
 			self._root.nextteam += 1
 			client.current_team = team_id
 			client.is_team_leader = True
-			self._root.teams[team_id] = Team(team_id, client.username, [client.username])
+			self._root.teams[team_id] = Team(self._root, team_id, client.username, [client.username])
 			client.Send("JOINEDTEAM " + json.dumps({"userNames":[client.username], "leader":client.username}))
 		elif client.is_team_leader:
 			team_id = client.current_team
@@ -3746,11 +3747,11 @@ class Protocol:
 			self.out_FAILED(client, "INVITETEAM", "Player is already in a team")
 			return False
 
-		if playerClient.team_invites[client.username]:
+		if client.username in playerClient.team_invites:
 			self.out_FAILED(client, "INVITETEAM", "Player has already been invited")
 			return False
 
-		playerClient[client.username] = team_id
+		playerClient.team_invites[client.username] = team_id
 		playerClient.Send("INVITETEAM " + json.dumps({"userName":client.username}))
 	
 	def in_INVITETEAMACCEPT(self, client, msg):
@@ -3920,10 +3921,54 @@ class Protocol:
 			teamMemberClient.Send(leftStr)
 	
 	def in_SAYTEAM(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "SAYTEAM", JSON_ERR)
+			return False
+	
+		try:
+			msg = getKey(obj, "msg", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "SAYTEAM", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "SAYTEAM", typeErrorMsg(typeError))
+			return False
+	
+		if client.current_team is None:
+			self.out_FAILED(client, "SAYTEAM", "Not in team")
+			return False
+
+		sayStr = "SAIDTEAM " + json.dumps({"msg":msg})
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(sayStr)
 
 	def in_SAYTEAMEX(self, client, msg):
-		pass
+		try: 
+			obj = json.loads(msg)
+		except Exception:
+			self.out_FAILED(client, "SAYTEAMEX", JSON_ERR)
+			return False
+
+		try:
+			msg = getKey(obj, "msg", unicode)
+		except KeyError as keyError:
+			self.out_FAILED(client, "SAYTEAMEX", keyErrorMsg(keyError))
+			return False
+		except TypeError as typeError:
+			self.out_FAILED(client, "SAYTEAMEX", typeErrorMsg(typeError))
+			return False
+
+		if client.current_team is None:
+			self.out_FAILED(client, "SAYTEAMEX", "Not in team")
+			return False
+
+		sayStr = "SAIDTEAMEX " + json.dumps({"msg":msg})
+		for userName in team.users:
+			teamMemberClient = self.clientFromUsername(userName)
+			teamMemberClient.Send(sayStr)
 	
 	def in_SETTEAMLEADER(self, client, msg):
 		try: 

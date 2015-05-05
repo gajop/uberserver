@@ -3704,7 +3704,7 @@ class Protocol:
 			playerClient = self.clientFromUsername(userName)
 			playerClient .Send("READYCHECKRESULT " + jsonStr)
 	
-	
+	# TODO: Make it so invites from ignored players are automatically declined (NOTE: ignoring them isn't enough, should be declined)
 	def in_INVITETEAM(self, client, msg):
 		try: 
 			obj = json.loads(msg)
@@ -3725,16 +3725,7 @@ class Protocol:
 			self.out_FAILED(client, "INVITETEAM", "Cannot invite self")
 			return False
 
-		if client.current_team is None:
-			team_id = str(self._root.nextteam)
-			self._root.nextteam += 1
-			client.current_team = team_id
-			client.is_team_leader = True
-			self._root.teams[team_id] = Team(self._root, team_id, client.username, [client.username])
-			client.Send("JOINEDTEAM " + json.dumps({"userNames":[client.username], "leader":client.username}))
-		elif client.is_team_leader:
-			team_id = client.current_team
-		else:
+		if client.current_team is not None and not client.is_team_leader:
 			self.out_FAILED(client, "INVITETEAM", "Currently in team and not leader")
 			return False
 
@@ -3746,6 +3737,16 @@ class Protocol:
 		if playerClient.current_team is not None:
 			self.out_FAILED(client, "INVITETEAM", "Player is already in a team")
 			return False
+
+		if client.current_team is None:
+			team_id = str(self._root.nextteam)
+			self._root.nextteam += 1
+			client.current_team = team_id
+			client.is_team_leader = True
+			self._root.teams[team_id] = Team(self._root, team_id, client.username, [client.username])
+			client.Send("JOINTEAM " + json.dumps({"userNames":[client.username], "leader":client.username}))
+		elif client.is_team_leader:
+			team_id = client.current_team
 
 		if client.username in playerClient.team_invites:
 			self.out_FAILED(client, "INVITETEAM", "Player has already been invited")
@@ -3781,8 +3782,8 @@ class Protocol:
 			return False
 
 		leaderClient = self.clientFromUsername(userName)
-		if leaderClient is not None:
-			self.out_FAILED(client, "INVITETEAMACCEPT", "No such team leader")
+		if leaderClient is None:
+			self.out_FAILED(client, "INVITETEAMACCEPT", "No such team leader: " + userName)
 			return False
 
 		if leaderClient.current_team != team_id or not leaderClient.is_team_leader:
@@ -3790,8 +3791,6 @@ class Protocol:
 			return False
 
 		team = self._root.teams[team_id]
-		team.users.append(client.username)
-		client.current_team = team_id
 
 		leaderClient.Send("INVITETEAMACCEPTED " + json.dumps({"userName":client.username}))
 
@@ -3799,6 +3798,10 @@ class Protocol:
 		for userName in team.users:
 			teamMemberClient = self.clientFromUsername(userName)
 			teamMemberClient.Send(joinedStr)
+			
+		team.users.append(client.username)
+		client.current_team = team_id
+		client.Send("JOINTEAM " + json.dumps({"userNames":team.users, "leader":team.leader}))
 
 		# send declines to all other team invites
 		declinedStr = "INVITETEAMDECLINED " + json.dumps({"userName":client.username})
@@ -3840,15 +3843,15 @@ class Protocol:
 			return False
 
 		leaderClient = self.clientFromUsername(userName)
-		if leaderClient is not None:
-			self.out_FAILED(client, "INVITETEAMDECLINE", "No such team leader")
+		if leaderClient is None:
+			self.out_FAILED(client, "INVITETEAMDECLINE", "No such team leader " + userName)
 			return False
 
 		if leaderClient.current_team != team_id or not leaderClient.is_team_leader:
 			self.out_FAILED(client, "INVITETEAMDECLINE", "Invite is no longer valid")
 			return False
 
-		leaderClient.Send("INVITETEAMDECLINE " + json.dumps({"userName":client.username}))
+		leaderClient.Send("INVITETEAMDECLINED " + json.dumps({"userName":client.username}))
 	
 	def in_KICKFROMTEAM(self, client, msg):
 		try: 
@@ -3940,7 +3943,8 @@ class Protocol:
 			self.out_FAILED(client, "SAYTEAM", "Not in team")
 			return False
 
-		sayStr = "SAIDTEAM " + json.dumps({"msg":msg})
+		team = self._root.teams[client.current_team]
+		sayStr = "SAIDTEAM " + json.dumps({"userName":client.username, "msg":msg})
 		for userName in team.users:
 			teamMemberClient = self.clientFromUsername(userName)
 			teamMemberClient.Send(sayStr)
@@ -3965,7 +3969,8 @@ class Protocol:
 			self.out_FAILED(client, "SAYTEAMEX", "Not in team")
 			return False
 
-		sayStr = "SAIDTEAMEX " + json.dumps({"msg":msg})
+		team = self._root.teams[client.current_team]
+		sayStr = "SAIDTEAMEX " + json.dumps({"userName":client.username, "msg":msg})
 		for userName in team.users:
 			teamMemberClient = self.clientFromUsername(userName)
 			teamMemberClient.Send(sayStr)

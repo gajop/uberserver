@@ -3898,13 +3898,7 @@ class Protocol:
 			teamMemberClient = self.clientFromUsername(userName)
 			teamMemberClient.Send(leftStr)
 		
-	def in_LEAVETEAM(self, client, msg):
-		try: 
-			obj = json.loads(msg)
-		except Exception:
-			self.out_FAILED(client, "LEAVETEAM", JSON_ERR)
-			return False
-	
+	def in_LEAVETEAM(self, client):
 		if client.current_team is None:
 			self.out_FAILED(client, "LEAVETEAM", "Not in team")
 			return False
@@ -3914,14 +3908,13 @@ class Protocol:
 			return False
 
 		team = self._root.teams[client.current_team]
-		team.users.remove(userName)
-		c.current_team = None
+		client.current_team = None
 
-		leftStr = "LEFTTEAM " + json.dumps({"userName":userName, "reason":"left"})
-		client.Send(leftStr)
+		leftStr = "LEFTTEAM " + json.dumps({"userName":client.username, "reason":"left"})
 		for userName in team.users:
 			teamMemberClient = self.clientFromUsername(userName)
 			teamMemberClient.Send(leftStr)
+		team.users.remove(client.username)
 	
 	def in_SAYTEAM(self, client, msg):
 		try: 

@@ -54,6 +54,7 @@ class DataHandler:
 		self.max_threads = 25
 		self.sqlurl = 'sqlite:///server.db'
 		self.nextbattle = 0
+		self.nextteam = 0
 		self.SayHooks = __import__('SayHooks')
 		self.censor = True
 		self.motd = None
@@ -68,6 +69,9 @@ class DataHandler:
 		self.clients = {}
 		self.db_ids = {}
 		self.battles = {}
+		self.queues = {}
+		self.teams = {}
+		self.socket = None
 		self.detectIp()
 
 	def initlogger(self, filename):
@@ -334,6 +338,31 @@ class DataHandler:
 							channel.channelMessage('<%s> has been unmuted (mute expired).' % client.username)
 		except:
 			self.error(traceback.format_exc())
+
+	def idle_timeout_step(self, now):
+		for client in self.clients.values():
+			if client.static: continue
+			if not client.logged_in and client.last_login < now - 60:
+				client.Send("SERVERMSG timed out, no login within 60 seconds!")
+				client.Remove("Connection timed out, didn't login")
+			elif client.lastdata < now - 60:
+				client.Send("SERVERMSG timed out, no data or PING received for >60 seconds, closing connection")
+				client.Remove("Connection timed out")
+
+	def console_print_step(self):
+		try:
+			while self.console_buffer:
+				line = self.console_buffer.pop(0).encode(UNICODE_ENCODING)
+				print(line)
+				if self.log:
+					self.logfile.write(line+'\n')
+			
+			if self.logfile:
+				self.logfile.flush()
+		except:
+			print(separator)
+			print(traceback.format_exc())
+			print(separator)
 
 	def error(self, error):
 		self.console_write('%s\n%s\n%s'%(separator,error,separator))

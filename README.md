@@ -1,8 +1,9 @@
 # Requirements
 - python 2.7
 - sqlalchemy
-- GeoIP
+- pycrypto
 - twisted
+- GeoIP
 
 # Installation
 ```

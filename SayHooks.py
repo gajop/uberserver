@@ -1,7 +1,10 @@
-import inspect, sys, os, types, time, string
+import inspect, sys, os, types, time, string, logging
+from datetime import datetime
+from datetime import timedelta
 
 bad_word_dict = {}
 bad_site_list = []
+bad_nick_list = set()
 chars = string.ascii_letters + string.digits
 
 def _update_lists():
@@ -13,19 +16,19 @@ def _update_lists():
 			line = line.strip()
 			if not line: continue
 			if line.count(' ') < 1:
-				bad_word_dict[line] = '***'
+				bad_word_dict[line.lower()] = '***'
 			else:
 				sline = line.split(' ', 1)
-				bad_word_dict[sline[0]] = ' '.join(sline[1:])
+				bad_word_dict[sline[0].lower()] = ' '.join(sline[1:])
 		f.close()
 	except Exception as e:
-		print('Error parsing profanity list: %s' %(e))
+		logging.error('Error parsing profanity list: %s' %(e))
 	try:
 		global bad_site_list
 		bad_site_list = []
 		f = open('bad_sites.txt', 'r')
 		for line in f.readlines():
-			line = line.strip()
+			line = line.strip().lower()
 			if not line: continue
 			if line in bad_site_list:
 				print("duplicate line in bad_sites.txt: %s" %(line))
@@ -33,7 +36,22 @@ def _update_lists():
 				bad_site_list.append(line)
 		f.close()
 	except Exception as e:
-		print('Error parsing shock site list: %s' %(e))
+		logging.error('Error parsing shock site list: %s' %(e))
+
+	try:
+		global bad_nick_list
+		bad_nick_list = set()
+		f = open('bad_nicks.txt', 'r')
+		for line in f.readlines():
+			line = line.strip().lower()
+			if not line:
+				continue
+			bad_nick_list.add(line)
+		f.close()
+
+	except Exception as e:
+		logging.error('Error parsing bad nick list: %s' %(e))
+
 
 _update_lists()
 
@@ -50,7 +68,7 @@ def _process_word(word):
 def _nasty_word_censor(msg):
 	msg = msg.lower()
 	for word in bad_word_dict.keys():
-		if word.lower() in msg: return False
+		if word in msg: return False
 	return True
 
 def _word_censor(msg):
@@ -101,7 +119,7 @@ def _spam_enum(client, chan):
 				bonus += 1 # something was said
 				already.append(message)
 		else: del client.lastsaid[chan][when]
-	
+
 	times.sort()
 	last_time = None
 	for t in times:
@@ -110,7 +128,7 @@ def _spam_enum(client, chan):
 			if diff < 1:
 				bonus += (1 - diff) * 1.5
 		last_time = t
-	
+
 	if bonus > 7: return True
 	else: return False
 
@@ -124,22 +142,30 @@ def _spam_rec(client, chan, msg):
 
 def hook_SAY(self, client, channel, msg):
 	username = client.username
-	
+
 	if channel.isMuted(client): return msg # client is muted, no use doing anything else
 	if channel.antispam and not channel.isOp(client): # don't apply antispam to ops
 		_spam_rec(client, channel.name, msg)
+		now = datetime.now()
+		duration = timedelta(minutes=5)
+		expires = now + duration
 		if _spam_enum(client, channel.name):
-			channel.muteUser(self._root.chanserv, client, 15)
-			# this next line is necessary, because users aren't always muted i.e. you can't mute channel founders or moderators
-			if channel.isMuted(client):
-				channel.channelMessage('%s was muted for spamming.' % username)
-				#if quiet: # maybe make quiet a channel-wide setting, so mute/kick/op/etc would be silent
-				#	client.Send('CHANNELMESAGE %s You were quietly muted for spamming.'%chan)
-				return ''
+			channel.muteUser(self._root.chanserv, client, expires, 'spamming', duration)
 	return msg
 
 def hook_OPENBATTLE(self, client, title):
 	title = _word_censor(title)
 	title = _site_censor(title)
 	return title
+
+def isNasty(msg):
+	msg = msg.lower()
+
+	cleaned = msg
+	for ch in ["[", "]", "_"]:
+		cleaned = cleaned.replace(ch, "")
+	for word in bad_nick_list:
+		if word in msg: return True
+		if word in cleaned: return True
+	return False
 

@@ -1,5 +1,6 @@
-#!/usr/bin/python
-
+#!/usr/bin/python3
+# coding=utf-8
+# This file is part of the uberserver (GPL v2 or later), see LICENSE
 
 dbfile = "/usr/share/GeoIP/GeoIP.dat"
 

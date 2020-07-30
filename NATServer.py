@@ -1,9 +1,5 @@
-try:
-	from SocketServer import UDPServer,DatagramRequestHandler
-except:
-	# renamed in python 3
-	from socketserver import UDPServer,DatagramRequestHandler
-import sys
+from socketserver import UDPServer,DatagramRequestHandler
+import sys, logging
 
 class CustomUDPServer(UDPServer):
 	def Bind(self, root):
@@ -32,18 +28,18 @@ class handler(DatagramRequestHandler):
 		addr = self.client_address
 		msg = self.rfile.readline().rstrip()
 		#print "%s from %s(%d)" % (msg, addr[0], addr[1])
-		self.wfile.write('PONG')
+		self.wfile.write(b'PONG')
 		if msg in self._root.usernames:
 			self._root.usernames[msg]._protocol._udp_packet(msg, addr[0], addr[1])
 
 class NATServer:
 	def __init__(self, port):
 		self.s = CustomUDPServer(('',port), handler)
-		print("Awaiting UDP messages on port %d" % port)
+		logging.info("Awaiting UDP messages on port %d" % port)
 
 	def bind(self, root):
 		self.s.Bind(root)
-	
+
 	def start(self):
 		self.s.serve_forever()
 

@@ -1,6 +1,4 @@
-from AutoDict import AutoDict
-
-class Queue(AutoDict):
+class Queue():
 	def __init__(self, root, name, title, description, minPlayers, maxPlayers, teamJoinAllowed, botName, requireConfirmation, gameNames=[], mapNames=[], engineVersions=[], users=[]):
 		self._root = root
 		self.name = name
@@ -18,6 +16,4 @@ class Queue(AutoDict):
 
 		# Matchmaking bot name
 		self.botName = botName
-
-		self.__AutoDictInit__()
 
